@@ -16,6 +16,9 @@
       "dest": "/backend/vercel.js"
     },
     {
+      "handle": "filesystem"
+    },
+    {
       "src": "/(.*)",
       "dest": "/"
     }
