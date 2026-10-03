@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { ROLE_CONFIG, setSession, type AuthRole } from "@/lib/auth";
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = "/api";
 
 const ROLE_MAP: Record<AuthRole, string> = {
   student: "STUDENT",

@@ -18,7 +18,7 @@ import {
   type AuthRole,
 } from "@/lib/auth";
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = "/api";
 
 const REGISTER_PATH: Partial<Record<AuthRole, string>> = {
   student: "/auth/register/student",
@@ -164,3 +164,4 @@ export function SignupForm({ role }: { role: AuthRole }) {
     </Card>
   );
 }
+

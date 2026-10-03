@@ -1,6 +1,6 @@
 // Shared helpers for talking to the LUCOUS Express backend from student pages.
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = "/api";
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -285,3 +285,4 @@ export interface ProfileUser {
   avatarUrl?: string | null;
   xp?: number;
 }
+

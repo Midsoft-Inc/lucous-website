@@ -13,7 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ROLE_CONFIG, type AuthRole } from "@/lib/auth";
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = "/api";
 
 type Step = "email" | "reset" | "done";
 
@@ -268,3 +268,4 @@ export function ForgotPasswordForm({ role }: { role: AuthRole }) {
     </Card>
   );
 }
+
