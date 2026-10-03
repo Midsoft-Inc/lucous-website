@@ -1828,6 +1828,10 @@ app.post("/api/payments/webhook", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`LUCOUS backend running on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`LUCOUS backend running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
