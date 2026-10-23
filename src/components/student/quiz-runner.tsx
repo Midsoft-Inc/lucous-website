@@ -87,13 +87,17 @@ export function StudentQuizPage({
         {activeTopicId ? (
           <QuizRunner mode={mode} topicId={activeTopicId} limit={config.limit} />
         ) : (
-          <Card>
+          <Card className="overflow-visible!">
             <CardHeader>
               <CardTitle>Select topic</CardTitle>
               <CardDescription>Choose what to work on</CardDescription>
             </CardHeader>
             <CardContent>
-              <TopicPicker onSelect={setTopic} />
+              <TopicPicker
+                onSelect={setTopic}
+                onStart={setTopic}
+                startLabel={`Start ${config.title}`}
+              />
             </CardContent>
           </Card>
         )}
@@ -124,8 +128,8 @@ function QuizRunner({
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [index, setIndex] = React.useState(0);
-  const [answers, setAnswers] = React.useState<Record<number, number>>({});
-  const [feedback, setFeedback] = React.useState<Record<number, Feedback>>({});
+  const [answers, setAnswers] = React.useState<Record<string | number, number>>({});
+  const [feedback, setFeedback] = React.useState<Record<string | number, Feedback>>({});
   const [phase, setPhase] = React.useState<"quiz" | "result">("quiz");
   const [submitting, setSubmitting] = React.useState(false);
   const [result, setResult] = React.useState<{
@@ -188,7 +192,7 @@ function QuizRunner({
   }
 
   async function submit() {
-    if (total === 0) return;
+    if (total === 0 || submitting) return;
     setSubmitting(true);
     setError("");
     try {
@@ -196,7 +200,7 @@ function QuizRunner({
         questionId: q.id,
         selected: answers[q.id] ?? -1,
       }));
-      const data = await apiFetch<{ attempt: Attempt; perQuestion: PerQuestion[] }>(
+      const data = await apiFetch<{ attempt: Attempt; perQuestion: PerQuestion[]; xp?: number }>(
         "/student/attempts",
         { method: "POST", body: { topicId, mode, answers: payload } }
       );
@@ -243,6 +247,11 @@ function QuizRunner({
               <span className="text-sm text-muted-foreground">
                 {attempt.correct}/{attempt.total} correct
               </span>
+              {attempt.xp ? (
+                <Badge variant="outline" className="text-primary border-primary/30 bg-primary/10">
+                  +{attempt.xp} XP
+                </Badge>
+              ) : null}
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -402,9 +411,9 @@ function QuizRunner({
               if (isLast) void submit();
               else setIndex((i) => Math.min(total - 1, i + 1));
             }}
-            disabled={!fb}
+            disabled={submitting || !fb}
           >
-            {isLast ? "Finish" : "Next"}
+            {submitting ? "Submitting…" : isLast ? "Finish" : "Next"}
           </Button>
         ) : (
           <div className="flex gap-2">

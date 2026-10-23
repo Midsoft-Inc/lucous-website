@@ -18,6 +18,9 @@ model User {
   password   String
   role       String   @default("STUDENT") // STUDENT | PARENT | TEACHER | ADMIN
   isVerified Boolean  @default(false)
+  // Teacher admin-approval state (persisted so approval survives restarts / re-login).
+  teacherStatus          String? // PENDING | APPROVED | REJECTED
+  teacherRejectionReason String?
   // Optional profile fields captured at signup / editable on the profile page.
   phone      String?
   grade      String?
@@ -32,10 +35,13 @@ model User {
   attempts        Attempt[]
   progress        StudentProgress[]
   materials       UploadedMaterial[]
+  lessonDrafts    LessonDraft[]
+  assessments     AssessmentDraft[]
   authoredContent LearningContent[] @relation("ContentAuthor")
   courses         Course[]
   enrollments     Enrollment[]
   otps            Otp[]
+  classAccessCodes ClassAccessCode[]
   gameScores      GameScore[]
   payments        Payment[]
   aiMessages      AiMessage[]
@@ -149,26 +155,114 @@ model Question {
 // -------------------- Teacher upload / AI pipeline foundation ---------------
 
 model UploadedMaterial {
-  id           String            @id @default(auto()) @map("_id") @db.ObjectId
-  teacherId    String            @db.ObjectId
-  teacher      User              @relation(fields: [teacherId], references: [id])
-  originalName String
-  fileType     String
-  fileSize     Int
-  boardId      String?           @db.ObjectId
-  gradeId      String?           @db.ObjectId
-  subjectId    String?           @db.ObjectId
-  chapterId    String?           @db.ObjectId
-  topicId      String?           @db.ObjectId
-  subject      Subject?          @relation(fields: [subjectId], references: [id])
-  chapter      Chapter?          @relation(fields: [chapterId], references: [id])
-  topic        Topic?            @relation(fields: [topicId], references: [id])
-  status       String            @default("UPLOADED") // UPLOADED | PROCESSING | ANALYZED | READY | FAILED
-  createdAt    DateTime          @default(now())
-  contents     LearningContent[]
-  questions    Question[]
+  id             String            @id @default(auto()) @map("_id") @db.ObjectId
+  teacherId      String            @db.ObjectId
+  teacher        User              @relation(fields: [teacherId], references: [id])
+  originalName   String
+  fileType       String
+  fileSize       Int
+  storageKey     String?           // Safe UUID storage identifier
+  storageUri     String?           // Storage locator (e.g. uploads/uuid.pdf or s3://...)
+  checksum       String?           // SHA-256 hash of file content for integrity
+  educationLevel String?           // primary | middle | secondary | higher_secondary | diploma
+  classGrade     String?           // 1 to 12
+  board          String?           // cbse | icse | maharashtra | telangana | andhra_pradesh | other
+  stream         String?           // science | commerce | arts (for higher_secondary)
+  branch         String?           // computer | it | mechanical | civil | electrical | electronics | other
+  scheme         String?           // msbte_k | msbte_i | sbtet | aicte | state_polytechnic
+  semester       Int?              // 1 to 8 (for diploma)
+  subjectName    String?
+  chapterName    String?
+  topicName      String?
+  language       String?           @default("en") // en | hi | mr | te
+  description    String?
+  boardId        String?           @db.ObjectId
+  gradeId        String?           @db.ObjectId
+  subjectId      String?           @db.ObjectId
+  chapterId      String?           @db.ObjectId
+  topicId        String?           @db.ObjectId
+  subject        Subject?          @relation(fields: [subjectId], references: [id])
+  chapter        Chapter?          @relation(fields: [chapterId], references: [id])
+  topic          Topic?            @relation(fields: [topicId], references: [id])
+  status         String            @default("UPLOADED") // UPLOADED | PROCESSING | ANALYZED | READY | FAILED
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  contents       LearningContent[]
+  questions      Question[]
+  lessonDrafts   LessonDraft[]
+  assessments    AssessmentDraft[]
 
   @@index([teacherId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ------------------------ Lesson Draft Generation ----------------------------
+
+model LessonDraft {
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  teacherId        String            @db.ObjectId
+  teacher          User              @relation(fields: [teacherId], references: [id])
+  sourceMaterialId String            @db.ObjectId
+  sourceMaterial   UploadedMaterial  @relation(fields: [sourceMaterialId], references: [id])
+  title            String
+  educationLevel   String?           // school | diploma
+  gradeOrSemester  String?
+  boardOrScheme    String?
+  subject          String
+  chapter          String?
+  topic            String?
+  content          String            // JSON-serialized structured LessonDraftContent
+  status           String            @default("DRAFT") // DRAFT | REVIEWED | PUBLISHED
+  accessCode       String?
+  publishedAt      DateTime?
+  aiProvider       String?           // gemini | openai | unconfigured_preview
+  aiModel          String?
+  sourceWordCount  Int?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([teacherId])
+  @@index([sourceMaterialId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ------------------- AI Assessment & Game Generation (Phase 3.3) -------------
+
+model AssessmentDraft {
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  teacherId        String            @db.ObjectId
+  teacher          User              @relation(fields: [teacherId], references: [id])
+  sourceMaterialId String            @db.ObjectId
+  sourceMaterial   UploadedMaterial  @relation(fields: [sourceMaterialId], references: [id])
+  title            String
+  description      String?
+  contentType      String            @default("PRACTICE") // PRACTICE | TEST | GAME
+  gameFormat       String?           // MULTIPLE_CHOICE | TRUE_FALSE | FILL_BLANK | MATCHING | MIXED
+  difficulty       String            @default("MEDIUM") // EASY | MEDIUM | HARD
+  questionCount    Int               @default(5)
+  educationLevel   String?           // school | diploma
+  gradeOrSemester  String?
+  boardOrScheme    String?
+  subject          String
+  chapter          String?
+  topic            String?
+  content          String            // JSON-serialized AssessmentContent
+  status           String            @default("DRAFT") // DRAFT | REVIEWED | PUBLISHED
+  accessCode       String?
+  publishedAt      DateTime?
+  aiProvider       String?           // gemini | openai | unconfigured_preview
+  aiModel          String?
+  sourceWordCount  Int?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([teacherId])
+  @@index([sourceMaterialId])
+  @@index([contentType])
+  @@index([status])
+  @@index([createdAt])
 }
 
 // --------------------------- Attempts + progress ----------------------------
@@ -308,4 +402,19 @@ model ParentChild {
 
   @@unique([parentId, studentId])
   @@index([studentId])
+}
+
+// One secure, time-limited code a teacher shares so students can open ALL of the
+// teacher's currently published lessons and assessments until it expires.
+model ClassAccessCode {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  code      String    @unique
+  teacherId String    @db.ObjectId
+  teacher   User      @relation(fields: [teacherId], references: [id])
+  title     String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([teacherId])
 }

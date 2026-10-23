@@ -60,7 +60,7 @@ export const ROLE_CONFIG: Record<
 export interface SignupField {
   name: string;
   label: string;
-  type: "text" | "email" | "password" | "tel";
+  type: "text" | "email" | "password" | "tel" | "select";
   placeholder: string;
   autoComplete?: string;
 }
@@ -109,14 +109,14 @@ export const SIGNUP_FIELDS: Record<AuthRole, SignupField[]> = {
     {
       name: "grade",
       label: "Class / Grade",
-      type: "text",
-      placeholder: "Enter your class",
+      type: "select",
+      placeholder: "Select your class",
     },
     {
       name: "board",
       label: "Board",
-      type: "text",
-      placeholder: "Enter your board",
+      type: "select",
+      placeholder: "Select your board",
     },
   ],
   parent: [
@@ -131,12 +131,6 @@ export const SIGNUP_FIELDS: Record<AuthRole, SignupField[]> = {
     MOBILE_FIELD,
     PASSWORD_FIELD,
     CONFIRM_FIELD,
-    {
-      name: "connectionCode",
-      label: "Student connection code",
-      type: "text",
-      placeholder: "Enter student connection code",
-    },
   ],
   teacher: [
     {
@@ -173,6 +167,7 @@ export interface AuthSession {
   role: AuthRole;
   email: string;
   name?: string;
+  avatarUrl?: string | null;
 }
 
 const SESSION_KEY = "lucous.session";

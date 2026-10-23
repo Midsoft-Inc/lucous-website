@@ -6,9 +6,10 @@ import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { LucousLogo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ROLE_CONFIG, clearSession, getSession, type AuthRole } from "@/lib/auth";
 import { useSession } from "@/lib/use-session";
-import { clearStoredAuth } from "@/lib/api";
+import { apiFetch, clearStoredAuth, getStoredUser, updateStoredUser, getUserInitials } from "@/lib/api";
 
 // Shared authenticated shell for the teacher / parent / admin workspaces.
 // Mirrors the student shell (RequireStudent) so the visual language is identical.
@@ -24,12 +25,28 @@ export function RequireRole({
   const router = useRouter();
   const config = ROLE_CONFIG[role];
   const session = useSession();
+  const [currentUser, setCurrentUser] = React.useState(() => getStoredUser());
 
   React.useEffect(() => {
     const current = getSession();
     if (!current || current.role !== role) {
       router.replace("/auth");
+      return;
     }
+
+    // Refresh trusted user data from /api/auth/me
+    let active = true;
+    apiFetch<{ user: any }>("/auth/me")
+      .then((data) => {
+        if (!active || !data?.user) return;
+        updateStoredUser(data.user);
+        setCurrentUser(data.user);
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
   }, [role, router]);
 
   if (!session || session.role !== role) {
@@ -39,6 +56,9 @@ export function RequireRole({
       </main>
     );
   }
+
+  const displayName = currentUser?.name ?? session.name ?? config.label;
+  const avatarUrl = currentUser?.avatarUrl ?? session.avatarUrl ?? null;
 
   return (
     <main className="min-h-dvh bg-background">
@@ -51,16 +71,28 @@ export function RequireRole({
           >
             <LucousLogo className="text-2xl" />
           </Link>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             {title ? (
-              <span className="hidden text-sm text-muted-foreground sm:inline">
+              <span className="hidden text-sm text-muted-foreground md:inline">
                 {title}
               </span>
             ) : null}
+            <div className="flex items-center gap-2 rounded-full p-1 hover:bg-muted transition-colors">
+              <Avatar className="size-8 ring-1 ring-border">
+                {avatarUrl ? <AvatarImage src={avatarUrl} alt={displayName} /> : null}
+                <AvatarFallback className="text-xs font-semibold bg-primary/10 text-primary">
+                  {getUserInitials(displayName, currentUser?.email ?? session.email)}
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-sm font-medium hidden sm:inline max-w-[120px] truncate">
+                {displayName}
+              </span>
+            </div>
             <Button
               variant="outline"
               size="sm"
               onClick={() => {
+                void apiFetch("/auth/logout", { method: "POST" }).catch(() => {});
                 clearStoredAuth();
                 clearSession();
                 router.replace(`/auth/${role}/login`);

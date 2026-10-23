@@ -13,13 +13,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { RequireStudent } from "@/components/student/require-student";
-import { apiFetch, type Attempt, type WeakTopic } from "@/lib/api";
+import { apiFetch, type Attempt, type WeakTopic, type ResolvedWeakTopic } from "@/lib/api";
 
 export function ResultsView() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [attempts, setAttempts] = React.useState<Attempt[]>([]);
   const [weakTopics, setWeakTopics] = React.useState<WeakTopic[]>([]);
+  const [resolvedTopics, setResolvedTopics] = React.useState<ResolvedWeakTopic[]>([]);
 
   React.useEffect(() => {
     let active = true;
@@ -27,11 +28,12 @@ export function ResultsView() {
       try {
         const [res, weak] = await Promise.all([
           apiFetch<{ attempts: Attempt[] }>("/student/results"),
-          apiFetch<{ weakTopics: WeakTopic[] }>("/student/weak-topics"),
+          apiFetch<{ weakTopics: WeakTopic[]; resolvedWeakTopics?: ResolvedWeakTopic[] }>("/student/weak-topics"),
         ]);
         if (!active) return;
         setAttempts(res.attempts);
         setWeakTopics(weak.weakTopics);
+        if (weak.resolvedWeakTopics) setResolvedTopics(weak.resolvedWeakTopics);
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : "Failed to load");
       } finally {
@@ -57,7 +59,7 @@ export function ResultsView() {
         <section>
           <h1 className="font-heading text-2xl font-semibold">Results</h1>
           <p className="text-sm text-muted-foreground">
-            Your attempt history and weak topics.
+            Your attempt history, weak topics, and learning improvement.
           </p>
         </section>
 
@@ -76,25 +78,42 @@ export function ResultsView() {
         <Card>
           <CardHeader>
             <CardTitle>Weak topics</CardTitle>
-            <CardDescription>Latest score below 60%</CardDescription>
+            <CardDescription>Latest score below 60% — revise & retest to improve</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-2">
             {loading ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : weakTopics.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No weak topics. Nice work!
+                No active weak topics. Excellent work!
               </p>
             ) : (
               weakTopics.map((w) => (
                 <div
                   key={w.topicId}
-                  className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2"
                 >
                   <div>
-                    <p className="text-sm font-medium">{w.topicName}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">{w.topicName}</p>
+                      {w.hasRetested && typeof w.improvement === "number" ? (
+                        <Badge
+                          variant="outline"
+                          className={
+                            w.improvement > 0
+                              ? "border-brand-green/30 bg-brand-green/10 text-brand-green text-xs"
+                              : "text-xs"
+                          }
+                        >
+                          {w.improvement > 0 ? `+${w.improvement}%` : `${w.improvement}%`} after retest
+                        </Badge>
+                      ) : null}
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                      {w.chapterName} · Last score {w.score}%
+                      {w.chapterName} · Latest score {w.score}%
+                      {typeof w.initialScore === "number" && w.initialScore !== w.score
+                        ? ` (Initial: ${w.initialScore}%)`
+                        : ""}
                     </p>
                   </div>
                   <Link
@@ -110,6 +129,38 @@ export function ResultsView() {
             )}
           </CardContent>
         </Card>
+
+        {resolvedTopics.length > 0 ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Mastered & Improved Topics</CardTitle>
+              <CardDescription>Topics where you improved above 60% on Retest</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-2">
+              {resolvedTopics.map((r) => (
+                <div
+                  key={r.topicId}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-green/20 bg-brand-green/5 px-3 py-2"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">{r.topicName}</p>
+                      <Badge variant="outline" className="border-brand-green/30 bg-brand-green/10 text-brand-green text-xs">
+                        +{r.improvement}% Improved
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {r.chapterName} · Raised from {r.initialScore}% to {r.latestScore}%
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="text-xs">
+                    Mastered
+                  </Badge>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Card>
           <CardHeader>
@@ -128,7 +179,14 @@ export function ResultsView() {
                   className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2"
                 >
                   <div>
-                    <p className="text-sm font-medium">{a.topic.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">{a.topic.name}</p>
+                      {a.xp ? (
+                        <Badge variant="outline" className="text-primary border-primary/30 bg-primary/10 text-xs">
+                          +{a.xp} XP
+                        </Badge>
+                      ) : null}
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       {a.topic.chapter.name} · {a.mode} · {a.correct} correct ·{" "}
                       {a.total - a.correct} incorrect ·{" "}

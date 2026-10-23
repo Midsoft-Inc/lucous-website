@@ -5,6 +5,12 @@ export const metadata: Metadata = {
   title: "Practice — LUCOUS",
 };
 
-export default function StudentPracticePage() {
-  return <StudentQuizPage mode="PRACTICE" />;
+export default async function StudentPracticePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ topicId?: string }>;
+}) {
+  const { topicId } = await searchParams;
+  const presetTopicId = topicId && topicId.trim() ? topicId : null;
+  return <StudentQuizPage mode="PRACTICE" presetTopicId={presetTopicId} />;
 }

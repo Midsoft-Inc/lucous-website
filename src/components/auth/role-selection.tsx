@@ -2,6 +2,9 @@ import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { AUTH_ROLES, ROLE_CONFIG } from "@/lib/auth";
 
+// Admin is hidden from the public role picker. The /auth/admin/* routes still exist.
+const VISIBLE_ROLES = AUTH_ROLES.filter((role) => role !== "admin");
+
 export function RoleSelection() {
   return (
     <div className="w-full text-center">
@@ -13,7 +16,7 @@ export function RoleSelection() {
       </p>
 
       <div className="mt-8 grid gap-3 text-left sm:grid-cols-2">
-        {AUTH_ROLES.map((role) => {
+        {VISIBLE_ROLES.map((role) => {
           const { label, tagline, icon: Icon } = ROLE_CONFIG[role];
           return (
             <Link

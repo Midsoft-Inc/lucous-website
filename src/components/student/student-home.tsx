@@ -8,9 +8,10 @@ import {
   Gamepad2,
   PenLine,
   ClipboardList,
-  GraduationCap,
   Sparkles,
   User,
+  KeyRound,
+  Award,
 } from "lucide-react";
 import {
   Card,
@@ -21,31 +22,37 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { computeProgress } from "@/components/student/progress-utils";
 import {
   Progress,
   ProgressLabel,
   ProgressValue,
 } from "@/components/ui/progress";
 import { RequireStudent } from "@/components/student/require-student";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   apiFetch,
   getStoredUser,
+  getUserInitials,
   type Attempt,
   type Board,
   type Grade,
   type Subject,
   type WeakTopic,
+  type StudentProgressData,
 } from "@/lib/api";
 import { useSession } from "@/lib/use-session";
+import { useTimeGreeting } from "@/lib/time-greeting";
 
 const QUICK_ACTIONS = [
+  { href: "/student/access", label: "Enter Code", icon: KeyRound, hint: "Teacher lesson code" },
   { href: "/student/learn", label: "Learn", icon: BookOpen, hint: "Study topics" },
   { href: "/student/play", label: "Play", icon: Gamepad2, hint: "Quick quiz game" },
   { href: "/student/practice", label: "Practice", icon: PenLine, hint: "Topic practice" },
   { href: "/student/test", label: "Test", icon: ClipboardList, hint: "Topic test" },
-  { href: "/student/courses", label: "Courses", icon: GraduationCap, hint: "Browse & enroll" },
   { href: "/student/games", label: "Games", icon: Gamepad2, hint: "Earn XP & compete" },
   { href: "/student/tutor", label: "AI Tutor", icon: Sparkles, hint: "Ask anything" },
+  { href: "/student/certificates", label: "Certificate", icon: Award, hint: "Unlock at 100%" },
   { href: "/student/profile", label: "Profile", icon: User, hint: "Your account" },
 ] as const;
 
@@ -53,7 +60,8 @@ export function StudentHome() {
   const session = useSession();
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
-  const [progress, setProgress] = React.useState({ completedCount: 0, totalContent: 0 });
+  const [progress, setProgress] = React.useState<StudentProgressData>({ completedCount: 0, totalContent: 0 });
+  const [tutorChats, setTutorChats] = React.useState(0);
   const [weakTopics, setWeakTopics] = React.useState<WeakTopic[]>([]);
   const [results, setResults] = React.useState<Attempt[]>([]);
   const [boards, setBoards] = React.useState<Board[]>([]);
@@ -64,16 +72,18 @@ export function StudentHome() {
     let active = true;
     (async () => {
       try {
-        const [prog, weak, res, brd, cls, subs] = await Promise.all([
-          apiFetch<{ completedCount: number; totalContent: number }>("/student/progress"),
+        const [prog, weak, res, brd, cls, subs, chats] = await Promise.all([
+          apiFetch<StudentProgressData>("/student/progress"),
           apiFetch<{ weakTopics: WeakTopic[] }>("/student/weak-topics"),
           apiFetch<{ attempts: Attempt[] }>("/student/results"),
           apiFetch<{ boards: Board[] }>("/student/boards"),
           apiFetch<{ classes: Grade[] }>("/student/classes"),
           apiFetch<{ subjects: Subject[] }>("/student/subjects"),
+          apiFetch<{ conversations: unknown[] }>("/ai/tutor/conversations").catch(() => ({ conversations: [] })),
         ]);
         if (!active) return;
         setProgress(prog);
+        setTutorChats(chats.conversations?.length ?? 0);
         setWeakTopics(weak.weakTopics);
         setResults(res.attempts);
         setBoards(brd.boards);
@@ -91,40 +101,100 @@ export function StudentHome() {
   }, []);
 
   const user = getStoredUser();
-  const name = user?.name ?? session?.name ?? "Student";
-  const pct =
-    progress.totalContent > 0
-      ? Math.round((progress.completedCount / progress.totalContent) * 100)
-      : 0;
+  const userName = user?.name ?? session?.name;
+  const { personalizedGreeting } = useTimeGreeting(userName);
+  // Real progress from lessons, practice/tests, games (XP) and AI Tutor use
+  const summary = computeProgress(progress, tutorChats);
+  const pct = summary.percent;
 
   return (
     <RequireStudent title="Dashboard">
       <div className="grid gap-5">
-        <section>
-          <h1 className="font-heading text-2xl font-semibold">
-            Welcome back, {name}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {user?.email ?? session?.email ?? ""} · Pick up where you left off.
-          </p>
+        <section className="flex items-center gap-4">
+          <Avatar className="size-14 ring-2 ring-primary/20 shrink-0 shadow-sm">
+            {user?.avatarUrl ? (
+              <AvatarImage src={user.avatarUrl} alt={userName || "Student"} className="object-cover" />
+            ) : null}
+            <AvatarFallback className="text-base font-semibold bg-primary/10 text-primary">
+              {getUserInitials(userName, user?.email ?? session?.email)}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <h1 suppressHydrationWarning className="font-heading text-2xl font-semibold">
+              {personalizedGreeting}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {user?.email ?? session?.email ?? ""} · Pick up where you left off.
+            </p>
+          </div>
         </section>
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
         <Card>
           <CardHeader>
-            <CardTitle>Learning progress</CardTitle>
-            <CardDescription>
-              {loading
-                ? "Loading…"
-                : `${progress.completedCount} of ${progress.totalContent} lessons completed`}
-            </CardDescription>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <CardTitle>Learning progress</CardTitle>
+                <CardDescription>
+                  {loading
+                    ? "Loading…"
+                    : `${progress.completedCount} of ${progress.totalContent} lessons completed`}
+                </CardDescription>
+              </div>
+              {progress.xp !== undefined && progress.xp > 0 ? (
+                <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary font-semibold text-xs">
+                  {progress.xp} Total XP
+                </Badge>
+              ) : null}
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <Progress value={pct}>
               <ProgressLabel>Completed</ProgressLabel>
               <ProgressValue />
             </Progress>
+            <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground sm:grid-cols-4">
+              {summary.parts.map((part) => (
+                <div key={part.key}>
+                  <span className="text-sm font-semibold text-foreground">
+                    {part.target > 0 ? `${Math.min(part.done, part.target)}/${part.target}` : "—"}
+                  </span>
+                  <p>{part.label}</p>
+                </div>
+              ))}
+            </div>
+            {summary.complete ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                <p className="flex items-center gap-2 text-sm font-medium">
+                  <Award className="size-4 text-primary" aria-hidden />
+                  100% complete! Your certificate is ready.
+                </p>
+                <Link href="/student/certificates" className={buttonVariants({ size: "sm" })}>
+                  Get certificate
+                </Link>
+              </div>
+            ) : null}
+            {progress.totalAttempts ? (
+              <div className="grid grid-cols-2 gap-3 pt-2 text-xs text-muted-foreground sm:grid-cols-4 border-t">
+                <div>
+                  <span className="font-semibold text-foreground text-sm">{progress.totalAttempts}</span>
+                  <p>Tests Taken</p>
+                </div>
+                <div>
+                  <span className="font-semibold text-foreground text-sm">{progress.averageScore ?? 0}%</span>
+                  <p>Avg. Score</p>
+                </div>
+                <div>
+                  <span className="font-semibold text-foreground text-sm">{progress.masteredTopicsCount ?? 0}</span>
+                  <p>Mastered (≥60%)</p>
+                </div>
+                <div>
+                  <span className="font-semibold text-foreground text-sm">{progress.weakTopicsCount ?? 0}</span>
+                  <p>Needs Revision</p>
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -229,12 +299,26 @@ export function StudentHome() {
                 weakTopics.map((w) => (
                   <div
                     key={w.topicId}
-                    className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2"
                   >
                     <div>
-                      <p className="text-sm font-medium">{w.topicName}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">{w.topicName}</p>
+                        {w.hasRetested && typeof w.improvement === "number" ? (
+                          <Badge
+                            variant="outline"
+                            className={
+                              w.improvement > 0
+                                ? "border-brand-green/30 bg-brand-green/10 text-brand-green text-xs"
+                                : "text-xs"
+                            }
+                          >
+                            {w.improvement > 0 ? `+${w.improvement}%` : `${w.improvement}%`}
+                          </Badge>
+                        ) : null}
+                      </div>
                       <p className="text-xs text-muted-foreground">
-                        {w.chapterName} · Last score {w.score}%
+                        {w.chapterName} · Latest score {w.score}%
                       </p>
                     </div>
                     <Link

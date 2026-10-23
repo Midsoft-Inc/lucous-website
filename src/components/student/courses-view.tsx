@@ -191,7 +191,20 @@ function BrowsePanel() {
 
   return (
     <div className="grid gap-4">
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <span>{error}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setError("")}
+            className="h-7 px-2 text-xs hover:bg-destructive/20"
+          >
+            Dismiss
+          </Button>
+        </div>
+      ) : null}
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : courses.length === 0 ? (

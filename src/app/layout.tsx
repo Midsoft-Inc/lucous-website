@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Poppins } from "next/font/google";
 import { Providers } from "@/components/providers";
+import { LucousChatbot } from "@/components/chatbot/lucous-chatbot";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -49,7 +50,11 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html
       lang="en"
@@ -59,6 +64,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="flex min-h-full flex-col font-sans">
         <Providers>{children}</Providers>
+        <LucousChatbot />
       </body>
     </html>
   );

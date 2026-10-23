@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { ROLE_CONFIG, type AuthRole } from "@/lib/auth";
 
 const API_URL = "/api";
@@ -156,10 +157,9 @@ export function ForgotPasswordForm({ role }: { role: AuthRole }) {
 
             <label className="grid gap-1.5 text-sm font-medium">
               New password
-              <Input
+              <PasswordInput
                 required
                 name="newPassword"
-                type="password"
                 minLength={8}
                 autoComplete="new-password"
                 placeholder="Enter new password"
@@ -170,10 +170,9 @@ export function ForgotPasswordForm({ role }: { role: AuthRole }) {
 
             <label className="grid gap-1.5 text-sm font-medium">
               Confirm new password
-              <Input
+              <PasswordInput
                 required
                 name="confirmPassword"
-                type="password"
                 minLength={8}
                 autoComplete="new-password"
                 placeholder="Confirm new password"

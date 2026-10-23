@@ -42,6 +42,9 @@ next-env.d.ts
 
 .vercel
 backend/node_modules/
+backend/uploads/
+backend/storage/documents/
+uploads/
 backend/.agents/
 backend/.claude/
 backend/.cursor/

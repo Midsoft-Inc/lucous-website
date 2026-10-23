@@ -12,6 +12,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
+import { VerifyEmailForm } from "@/components/auth/verify-email-form";
 import { Switch } from "@/components/ui/switch";
 import { ROLE_CONFIG, setSession, type AuthRole } from "@/lib/auth";
 
@@ -31,6 +33,8 @@ export function LoginForm({ role }: { role: AuthRole }) {
   const [remember, setRemember] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
+  const [verifyEmail, setVerifyEmail] = React.useState<string | null>(null);
+  const [notice, setNotice] = React.useState("");
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -63,6 +67,13 @@ export function LoginForm({ role }: { role: AuthRole }) {
 
       const data = await response.json();
 
+      if (data.needsVerification) {
+        // Email not verified yet: ask for the emailed code before logging in.
+        setVerifyEmail(email.toLowerCase());
+        setLoading(false);
+        return;
+      }
+
       if (!response.ok || !data.success) {
         setError(data.message || "Login failed.");
         setLoading(false);
@@ -88,6 +99,7 @@ export function LoginForm({ role }: { role: AuthRole }) {
         role,
         email: user.email,
         name: user.name,
+        avatarUrl: user.avatarUrl ?? null,
       });
 
       router.replace(config.dashboardPath);
@@ -99,6 +111,28 @@ export function LoginForm({ role }: { role: AuthRole }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (verifyEmail) {
+    return (
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle className="text-lg">Verify your email</CardTitle>
+          <CardDescription>
+            Confirm your email address to continue
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <VerifyEmailForm
+            email={verifyEmail}
+            onVerified={() => {
+              setVerifyEmail(null);
+              setNotice("Email verified. Please log in.");
+            }}
+          />
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
@@ -129,10 +163,9 @@ export function LoginForm({ role }: { role: AuthRole }) {
 
           <label className="grid gap-1.5 text-sm font-medium">
             Password
-            <Input
+            <PasswordInput
               required
               name="password"
-              type="password"
               minLength={8}
               autoComplete="current-password"
               placeholder="Enter your password"
@@ -159,6 +192,10 @@ export function LoginForm({ role }: { role: AuthRole }) {
               Forgot password?
             </Link>
           </div>
+
+          {notice ? (
+            <p className="text-sm font-normal text-primary">{notice}</p>
+          ) : null}
 
           {error ? (
             <p className="text-sm font-normal text-destructive">

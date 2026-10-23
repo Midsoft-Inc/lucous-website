@@ -12,20 +12,26 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { RequireRole } from "@/components/auth/require-role";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   apiFetch,
   getStoredUser,
+  getUserInitials,
   type AdminStats,
   type AdminUser,
   type Course,
   type ProfileUser,
 } from "@/lib/api";
 import { cn } from "cn";
+import { useTimeGreeting } from "@/lib/time-greeting";
+import { ProfileEditor } from "@/components/auth/profile-editor";
+import { TeacherApplicationsPanel } from "./teacher-applications-panel";
 
-type Tab = "overview" | "users" | "courses" | "profile";
+type Tab = "overview" | "applications" | "users" | "courses" | "profile";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
+  { id: "applications", label: "Teacher Applications" },
   { id: "users", label: "Users" },
   { id: "courses", label: "Courses" },
   { id: "profile", label: "Profile" },
@@ -34,15 +40,26 @@ const TABS: { id: Tab; label: string }[] = [
 export function AdminHome() {
   const [tab, setTab] = React.useState<Tab>("overview");
   const user = getStoredUser();
+  const { personalizedGreeting } = useTimeGreeting(user?.name);
 
   return (
     <RequireRole role="admin" title="Admin">
       <div className="grid gap-5">
-        <section>
-          <h1 className="font-heading text-2xl font-semibold">
-            {user?.name ?? "Admin"} · Platform console
-          </h1>
-          <p className="text-sm text-muted-foreground">{user?.email ?? ""}</p>
+        <section className="flex items-center gap-4">
+          <Avatar className="size-14 ring-2 ring-primary/20 shrink-0 shadow-sm">
+            {user?.avatarUrl ? (
+              <AvatarImage src={user.avatarUrl} alt={user?.name || "Admin"} className="object-cover" />
+            ) : null}
+            <AvatarFallback className="text-base font-semibold bg-primary/10 text-primary">
+              {getUserInitials(user?.name, user?.email)}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <h1 suppressHydrationWarning className="font-heading text-2xl font-semibold">
+              {personalizedGreeting} · Platform console
+            </h1>
+            <p className="text-sm text-muted-foreground">{user?.email ?? ""}</p>
+          </div>
         </section>
 
         <div className="flex flex-wrap gap-2">
@@ -62,6 +79,7 @@ export function AdminHome() {
         </div>
 
         {tab === "overview" ? <OverviewPanel /> : null}
+        {tab === "applications" ? <TeacherApplicationsPanel /> : null}
         {tab === "users" ? <UsersPanel /> : null}
         {tab === "courses" ? <CoursesPanel /> : null}
         {tab === "profile" ? <ProfilePanel /> : null}
@@ -124,6 +142,7 @@ function OverviewPanel() {
 
 function UsersPanel() {
   const [role, setRole] = React.useState("");
+  const [search, setSearch] = React.useState("");
   const [users, setUsers] = React.useState<AdminUser[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
@@ -131,53 +150,85 @@ function UsersPanel() {
   React.useEffect(() => {
     let active = true;
     setLoading(true);
-    (async () => {
-      try {
-        const q = role ? `?role=${role}` : "";
-        const d = await apiFetch<{ users: AdminUser[] }>(`/admin/users${q}`);
-        if (active) setUsers(d.users);
-      } catch (e) {
-        if (active) setError(e instanceof Error ? e.message : "Failed to load users");
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
+    setError("");
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          const params = new URLSearchParams();
+          if (role) params.set("role", role);
+          if (search.trim()) params.set("q", search.trim());
+          const queryStr = params.toString() ? `?${params.toString()}` : "";
+          const d = await apiFetch<{ users: AdminUser[] }>(`/admin/users${queryStr}`);
+          if (active) setUsers(d.users);
+        } catch (e) {
+          if (active) setError(e instanceof Error ? e.message : "Failed to load users");
+        } finally {
+          if (active) setLoading(false);
+        }
+      })();
+    }, 250);
+
     return () => {
       active = false;
+      clearTimeout(timer);
     };
-  }, [role]);
+  }, [role, search]);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Users</CardTitle>
-        <CardDescription>
-          <select
-            className="mt-1 h-9 rounded-lg border border-input bg-background px-2 text-sm"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-          >
-            <option value="">All roles</option>
-            <option value="STUDENT">Students</option>
-            <option value="TEACHER">Teachers</option>
-            <option value="PARENT">Parents</option>
-            <option value="ADMIN">Admins</option>
-          </select>
-        </CardDescription>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle>User Directory</CardTitle>
+            <CardDescription>
+              {loading ? "Searching users…" : `${users.length} user${users.length === 1 ? "" : "s"} found`}
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              className="h-9 w-48 text-sm"
+              placeholder="Search name or email…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <select
+              className="h-9 rounded-lg border border-input bg-background px-2 text-sm"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+            >
+              <option value="">All roles</option>
+              <option value="STUDENT">Students</option>
+              <option value="TEACHER">Teachers</option>
+              <option value="PARENT">Parents</option>
+              <option value="ADMIN">Admins</option>
+            </select>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="grid gap-2">
+        {error ? (
+          <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        ) : null}
+
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : error ? (
-          <p className="text-sm text-destructive">{error}</p>
+          <p className="py-4 text-center text-sm text-muted-foreground">Loading users…</p>
         ) : users.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No users found.</p>
+          <div className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground">
+            {search || role ? "No users matching the specified filters." : "No registered users found."}
+          </div>
         ) : (
           users.map((u) => (
             <div key={u.id} className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2">
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{u.name}</p>
-                <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {u.email}
+                  {u.grade ? ` · ${u.grade}` : ""}
+                  {u.board ? ` · ${u.board}` : ""}
+                  {u.school ? ` · ${u.school}` : ""}
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant="outline">{u.role}</Badge>
@@ -193,39 +244,67 @@ function UsersPanel() {
 
 function CoursesPanel() {
   const [courses, setCourses] = React.useState<Course[]>([]);
+  const [search, setSearch] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
 
   React.useEffect(() => {
     let active = true;
-    (async () => {
-      try {
-        const d = await apiFetch<{ courses: (Course & { teacher?: { name: string } })[] }>("/admin/courses");
-        if (active) setCourses(d.courses);
-      } catch (e) {
-        if (active) setError(e instanceof Error ? e.message : "Failed to load courses");
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
+    setLoading(true);
+    setError("");
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          const params = new URLSearchParams();
+          if (search.trim()) params.set("q", search.trim());
+          const queryStr = params.toString() ? `?${params.toString()}` : "";
+          const d = await apiFetch<{ courses: (Course & { teacher?: { name: string } })[] }>(`/admin/courses${queryStr}`);
+          if (active) setCourses(d.courses);
+        } catch (e) {
+          if (active) setError(e instanceof Error ? e.message : "Failed to load courses");
+        } finally {
+          if (active) setLoading(false);
+        }
+      })();
+    }, 250);
+
     return () => {
       active = false;
+      clearTimeout(timer);
     };
-  }, []);
+  }, [search]);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>All courses</CardTitle>
-        <CardDescription>{courses.length} total</CardDescription>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle>Course Catalog</CardTitle>
+            <CardDescription>
+              {loading ? "Searching courses…" : `${courses.length} course${courses.length === 1 ? "" : "s"} total`}
+            </CardDescription>
+          </div>
+          <Input
+            className="h-9 w-56 text-sm"
+            placeholder="Search by title, subject, board…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
       </CardHeader>
       <CardContent className="grid gap-2">
+        {error ? (
+          <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        ) : null}
+
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : error ? (
-          <p className="text-sm text-destructive">{error}</p>
+          <p className="py-4 text-center text-sm text-muted-foreground">Loading courses…</p>
         ) : courses.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No courses yet.</p>
+          <div className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground">
+            {search ? "No courses matching your search." : "No courses have been created yet."}
+          </div>
         ) : (
           courses.map((c) => (
             <div key={c.id} className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2">
@@ -247,73 +326,5 @@ function CoursesPanel() {
 }
 
 function ProfilePanel() {
-  const [me, setMe] = React.useState<ProfileUser | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [saving, setSaving] = React.useState(false);
-  const [error, setError] = React.useState("");
-  const [saved, setSaved] = React.useState(false);
-  const [form, setForm] = React.useState({ name: "", phone: "" });
-
-  React.useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const d = await apiFetch<{ user: ProfileUser }>("/auth/me");
-        if (!active) return;
-        setMe(d.user);
-        setForm({ name: d.user.name ?? "", phone: d.user.phone ?? "" });
-      } catch (e) {
-        if (active) setError(e instanceof Error ? e.message : "Failed to load profile");
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setError("");
-    setSaved(false);
-    try {
-      const d = await apiFetch<{ user: ProfileUser }>("/auth/profile", { method: "PATCH", body: form });
-      setMe(d.user);
-      setSaved(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update profile");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (loading) return <p className="text-sm text-muted-foreground">Loading profile…</p>;
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Profile</CardTitle>
-        <CardDescription>{me?.email} · {me?.role}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="grid gap-3.5" onSubmit={save}>
-          <label className="grid gap-1.5 text-sm font-medium">
-            Name
-            <Input className="h-10" value={form.name} disabled={saving}
-              onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </label>
-          <label className="grid gap-1.5 text-sm font-medium">
-            Phone
-            <Input className="h-10" value={form.phone} disabled={saving}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-          </label>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          {saved ? <p className="text-sm text-brand-green">Profile updated.</p> : null}
-          <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save profile"}</Button>
-        </form>
-      </CardContent>
-    </Card>
-  );
+  return <ProfileEditor role="admin" showXp={false} />;
 }
