@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Lock, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -136,7 +137,7 @@ export function LoginForm({ role }: { role: AuthRole }) {
   }
 
   return (
-    <Card className="w-full">
+    <Card className="w-full rounded-2xl dark:bg-gradient-to-b dark:from-[#0d1a3a]/70 dark:to-[#08112b]/80 dark:ring-blue-400/30 dark:shadow-[0_0_48px_-12px_rgba(59,130,246,0.45)]">
       <CardHeader>
         <CardTitle className="text-lg">{config.label} login</CardTitle>
         <CardDescription>Sign in to continue to LUCOUS</CardDescription>
@@ -146,32 +147,44 @@ export function LoginForm({ role }: { role: AuthRole }) {
         <form className="grid gap-3.5" onSubmit={onSubmit}>
           <label className="grid gap-1.5 text-sm font-medium">
             Email / ID
-            <Input
-              required
-              name="identifier"
-              type="text"
-              autoComplete="username"
-              placeholder={
-                role === "admin"
-                  ? "Enter your admin email or ID"
-                  : "Enter your email"
-              }
-              className="h-10"
-              disabled={loading}
-            />
+            <div className="relative">
+              <Mail
+                className="pointer-events-none absolute top-1/2 left-3.5 size-[18px] -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
+              <Input
+                required
+                name="identifier"
+                type="text"
+                autoComplete="username"
+                placeholder={
+                  role === "admin"
+                    ? "Enter your admin email or ID"
+                    : "Enter your email"
+                }
+                className="h-12 rounded-xl pl-11"
+                disabled={loading}
+              />
+            </div>
           </label>
 
           <label className="grid gap-1.5 text-sm font-medium">
             Password
-            <PasswordInput
-              required
-              name="password"
-              minLength={8}
-              autoComplete="current-password"
-              placeholder="Enter your password"
-              className="h-10"
-              disabled={loading}
-            />
+            <div className="relative">
+              <Lock
+                className="pointer-events-none absolute top-1/2 left-3.5 z-10 size-[18px] -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
+              <PasswordInput
+                required
+                name="password"
+                minLength={8}
+                autoComplete="current-password"
+                placeholder="Enter your password"
+                className="h-12 rounded-xl pl-11"
+                disabled={loading}
+              />
+            </div>
           </label>
 
           <div className="flex items-center justify-between gap-2">
@@ -205,7 +218,7 @@ export function LoginForm({ role }: { role: AuthRole }) {
 
           <Button
             type="submit"
-            className="mt-1 h-10 w-full text-sm"
+            className="mt-1 h-12 w-full rounded-xl text-sm font-semibold"
             disabled={loading}
           >
             {loading ? "Logging in..." : "Log in"}

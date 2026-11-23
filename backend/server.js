@@ -17,6 +17,7 @@ const {
   getEnvAdminPublicUser,
   attemptEnvAdminLogin,
 } = require("./services/env-admin");
+const roleLimiter = require("./services/role-attempt-limiter");
 const {
   validateAvatarFile,
   MAX_AVATAR_SIZE_BYTES,
@@ -129,10 +130,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "lucous-development-secret";
 const allowedOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
-  "https://lucous-site.vercel.app",
-  ...(process.env.FRONTEND_URL
-    ? [process.env.FRONTEND_URL.replace(/\/$/, "")]
-    : []),
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
 ];
 
 // Allow the LUCOUS Next.js frontend to communicate with the backend
@@ -380,6 +378,8 @@ function emailVerificationRequired() {
 // ----------------------------- Registration ---------------------------------
 // Only public roles are allowed for registration. ADMIN is strictly prohibited.
 const PUBLIC_ALLOWED_ROLES = ["STUDENT", "PARENT", "TEACHER"];
+// Every role that exists on the platform (used by the admin user filter).
+const VALID_ROLES = ["STUDENT", "TEACHER", "PARENT", "ADMIN"];
 
 async function registerUser(req, res, forcedRole) {
   try {
@@ -530,6 +530,39 @@ app.post("/api/auth/register/teacher", (req, res) => registerUser(req, res, "TEA
 app.post("/api/auth/register/parent", (req, res) => registerUser(req, res, "PARENT"));
 
 // --------------------------------- Login ------------------------------------
+// Builds the final session (7-day token + public user) once a person is fully verified.
+function buildLoginPayload(user) {
+  const token = jwt.sign(
+    {
+      userId: user.id,
+      role: user.role,
+    },
+    JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+
+  const teacherApp = user.role === "TEACHER" ? (syncApplicationFromUser(user) || getApplicationByUserId(user.id) || createPendingTeacherApplication(user)) : null;
+
+  return {
+    token,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      isVerified: user.isVerified || false,
+      avatarUrl: user.avatarUrl || null,
+      phone: user.phone || null,
+      grade: user.grade || null,
+      board: user.board || null,
+      school: user.school || null,
+      subject: user.subject || null,
+      xp: user.xp || 0,
+      teacherApplication: teacherApp,
+    },
+  };
+}
+
 app.post("/api/auth/login", async (req, res) => {
   try {
     const email = String(req.body.email || "").trim().toLowerCase();
@@ -542,6 +575,22 @@ app.post("/api/auth/login", async (req, res) => {
       });
     }
 
+    // Role verification: the login page says which role was selected.
+    const selectedRole = roleLimiter.normalizeRole(req.body.role);
+    // Two-step sign-in: password first, then the role is chosen on the next screen.
+    const roleStep = req.body.roleStep === true;
+    if (selectedRole || roleStep) {
+      const state = roleLimiter.status(req.ip, email);
+      if (state.blocked) {
+        res.set("Retry-After", String(state.retryAfterSec));
+        return res.status(429).json({
+          success: false,
+          code: "ROLE_ATTEMPTS_EXCEEDED",
+          message: roleLimiter.blockedMessage(state.retryAfterSec),
+        });
+      }
+    }
+
     // Admin defined in the .env file (not stored in the database).
     const envAdminResult = await attemptEnvAdminLogin({
       email,
@@ -550,6 +599,22 @@ app.post("/api/auth/login", async (req, res) => {
       signToken: (payload) => jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" }),
     });
     if (envAdminResult) {
+      if (envAdminResult.status === 200 && roleStep) {
+        return res.status(403).json({
+          success: false,
+          message: "Admin accounts sign in from the admin page.",
+        });
+      }
+      if (envAdminResult.status === 200 && selectedRole && selectedRole !== "ADMIN") {
+        const state = roleLimiter.recordMismatch(req.ip, email);
+        return res.status(state.blocked ? 429 : 403).json({
+          success: false,
+          code: state.blocked ? "ROLE_ATTEMPTS_EXCEEDED" : "ROLE_MISMATCH",
+          attemptsLeft: state.attemptsLeft,
+          message: roleLimiter.mismatchMessage("ADMIN", selectedRole, state.attemptsLeft),
+        });
+      }
+      if (envAdminResult.status === 200) roleLimiter.reset(req.ip, email);
       return res.status(envAdminResult.status).json(envAdminResult.body);
     }
 
@@ -588,6 +653,18 @@ app.post("/api/auth/login", async (req, res) => {
       });
     }
 
+    // Correct password but wrong role selected -> counts toward the 5-attempt limit.
+    if (selectedRole && user.role !== selectedRole) {
+      const state = roleLimiter.recordMismatch(req.ip, email);
+      return res.status(state.blocked ? 429 : 403).json({
+        success: false,
+        code: state.blocked ? "ROLE_ATTEMPTS_EXCEEDED" : "ROLE_MISMATCH",
+        attemptsLeft: state.attemptsLeft,
+        message: roleLimiter.mismatchMessage(user.role, selectedRole, state.attemptsLeft),
+      });
+    }
+    if (selectedRole) roleLimiter.reset(req.ip, email);
+
     if (
       emailVerificationRequired() &&
       user.role !== "ADMIN" &&
@@ -601,36 +678,27 @@ app.post("/api/auth/login", async (req, res) => {
       });
     }
 
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        role: user.role,
-      },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    const teacherApp = user.role === "TEACHER" ? (syncApplicationFromUser(user) || getApplicationByUserId(user.id) || createPendingTeacherApplication(user)) : null;
+    if (roleStep) {
+      if (user.role === "ADMIN") {
+        return res.status(403).json({
+          success: false,
+          message: "Admin accounts sign in from the admin page.",
+        });
+      }
+      // Password accepted, but NO session yet. This short-lived ticket cannot be used
+      // for any API call; it only lets the person take the role-verification step.
+      const pendingToken = jwt.sign(
+        { purpose: "role_pending", uid: user.id, email: user.email },
+        JWT_SECRET,
+        { expiresIn: "10m" }
+      );
+      return res.json({ success: true, needsRole: true, pendingToken, email: user.email });
+    }
 
     res.json({
       success: true,
       message: "Login successful",
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        isVerified: user.isVerified || false,
-        avatarUrl: user.avatarUrl || null,
-        phone: user.phone || null,
-        grade: user.grade || null,
-        board: user.board || null,
-        school: user.school || null,
-        subject: user.subject || null,
-        xp: user.xp || 0,
-        teacherApplication: teacherApp,
-      },
+      ...buildLoginPayload(user),
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -638,6 +706,78 @@ app.post("/api/auth/login", async (req, res) => {
       success: false,
       message: "Login failed",
     });
+  }
+});
+
+// Step 2 of the two-step sign-in: the person picks their role. A wrong role counts
+// toward the 5-attempt limit (then a 15-minute block). The right role gets the session.
+app.post("/api/auth/verify-role", async (req, res) => {
+  try {
+    const selectedRole = roleLimiter.normalizeRole(req.body.role);
+    if (!selectedRole || selectedRole === "ADMIN") {
+      return res.status(400).json({ success: false, message: "Please choose your role." });
+    }
+
+    let payload = null;
+    try {
+      payload = jwt.verify(String(req.body.pendingToken || ""), JWT_SECRET);
+    } catch {
+      payload = null;
+    }
+    if (!payload || payload.purpose !== "role_pending" || !payload.uid) {
+      return res.status(401).json({
+        success: false,
+        code: "ROLE_STEP_EXPIRED",
+        message: "Your sign-in step expired. Please log in again.",
+      });
+    }
+
+    const email = String(payload.email || "").toLowerCase();
+    const state = roleLimiter.status(req.ip, email);
+    if (state.blocked) {
+      res.set("Retry-After", String(state.retryAfterSec));
+      return res.status(429).json({
+        success: false,
+        code: "ROLE_ATTEMPTS_EXCEEDED",
+        message: roleLimiter.blockedMessage(state.retryAfterSec),
+      });
+    }
+
+    let user = null;
+    if (process.env.MONGODB_URI && isMongoId(String(payload.uid))) {
+      try {
+        user = await prisma.user.findUnique({ where: { id: String(payload.uid) } });
+      } catch (dbErr) {
+        console.warn("Prisma verify-role fallback:", dbErr.message);
+      }
+    }
+    if (!user) user = inMemoryUsers.get(String(payload.uid)) || null;
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        code: "ROLE_STEP_EXPIRED",
+        message: "Your sign-in step expired. Please log in again.",
+      });
+    }
+
+    if (user.role !== selectedRole) {
+      const failed = roleLimiter.recordMismatch(req.ip, email);
+      // Deliberately does not reveal the account's real role.
+      return res.status(failed.blocked ? 429 : 403).json({
+        success: false,
+        code: failed.blocked ? "ROLE_ATTEMPTS_EXCEEDED" : "ROLE_MISMATCH",
+        attemptsLeft: failed.attemptsLeft,
+        message: failed.blocked
+          ? roleLimiter.blockedMessage(Math.ceil(roleLimiter.WINDOW_MS / 1000))
+          : `That role does not match this account. ${failed.attemptsLeft} attempt${failed.attemptsLeft === 1 ? "" : "s"} left.`,
+      });
+    }
+
+    roleLimiter.reset(req.ip, email);
+    return res.json({ success: true, message: "Login successful", ...buildLoginPayload(user) });
+  } catch (error) {
+    console.error("Verify role error:", error);
+    res.status(500).json({ success: false, message: "Failed to verify role" });
   }
 });
 
@@ -857,10 +997,12 @@ app.post("/api/auth/send-otp", async (req, res) => {
     }
 
     const otpPurpose = purpose === "RESET" ? "RESET" : "VERIFY";
+    console.log(`[OTP] request: ${otpPurpose} code for ${rawEmail} (email sending ${isEmailConfigured() ? "ON" : "OFF - code will only be printed here"})`);
 
     const sentKey = `${otpPurpose}:${rawEmail}`;
     const last = otpLastSent.get(sentKey) || 0;
     if (Date.now() - last < OTP_RESEND_COOLDOWN_MS) {
+      console.log(`[OTP] skipped: asked again within ${OTP_RESEND_COOLDOWN_MS / 1000}s for ${rawEmail}`);
       return res.status(429).json({
         success: false,
         message: "Please wait a few seconds before requesting another code.",
@@ -868,8 +1010,18 @@ app.post("/api/auth/send-otp", async (req, res) => {
     }
 
     const user = await prisma.user.findUnique({ where: { email: rawEmail } });
-    const code = await issueOtp(rawEmail, otpPurpose, user ? user.id : null);
+
+    // Never email a code to an address that has no account (stops anyone using this
+    // endpoint to spam strangers), and don't reveal whether an account exists.
+    if (!user || (otpPurpose === "VERIFY" && user.isVerified)) {
+      console.log(`[OTP] NO EMAIL SENT to ${rawEmail}: ${!user ? "no account with this email exists in the database" : "this account is already verified"}`);
+      otpLastSent.set(sentKey, Date.now());
+      return res.json({ success: true, message: "OTP sent" });
+    }
+
+    const code = await issueOtp(rawEmail, otpPurpose, user.id);
     otpLastSent.set(sentKey, Date.now());
+    if (isEmailConfigured()) console.log(`[OTP] ${otpPurpose} email handed to Gmail for ${rawEmail}`);
 
     res.json({
       success: true,
@@ -982,6 +1134,15 @@ app.post("/api/auth/reset-password", async (req, res) => {
       });
     }
 
+    // Brute-force protection: 5 wrong codes lock this reset until the code expires.
+    const resetKey = `reset:${rawEmail}`;
+    if (otpTooManyAttempts(resetKey)) {
+      return res.status(429).json({
+        success: false,
+        message: "Too many incorrect attempts. Request a new code and try again later.",
+      });
+    }
+
     const otp = await prisma.otp.findFirst({
       where: {
         email: rawEmail,
@@ -996,10 +1157,12 @@ app.post("/api/auth/reset-password", async (req, res) => {
     const user = await prisma.user.findUnique({ where: { email: rawEmail } });
 
     if (!otp || !user) {
+      otpRecordFailure(resetKey);
       return res
         .status(400)
         .json({ success: false, message: "Invalid or expired OTP" });
     }
+    otpFailures.delete(resetKey);
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
@@ -1032,6 +1195,12 @@ function verifyRole(req, res, next, expectedRole) {
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
+
+    if (payload.purpose) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid or expired token" });
+    }
 
     if (payload.role !== expectedRole) {
       return res
@@ -1126,6 +1295,11 @@ function authenticate(req, res, next) {
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
+    if (payload.purpose) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid or expired token" });
+    }
     req.userId = payload.userId || payload.id;
     req.role = payload.role;
     next();
@@ -2232,6 +2406,16 @@ app.use("/api/student/access/class", createStudentClassAccessRouter(prisma));
 const { createStudentAccessRouter } = require("./routes/student-access");
 app.use("/api/student/access", createStudentAccessRouter(prisma));
 
+// Learning engagement engine: mastery, recommendations and reminders.
+try {
+  const { createStudentEngagementRouter } = require("./routes/student-engagement");
+  app.use("/api/student/engagement", createStudentEngagementRouter(prisma, requireStudent));
+} catch (err) {
+  // Start normally if the optional engagement files are not installed yet.
+  if (err.code !== "MODULE_NOT_FOUND" || !/student-engagement|learning-engine/.test(err.message)) throw err;
+  console.warn("[LUCOUS] Student engagement routes not installed; skipping.");
+}
+
 app.get("/api/teacher/content", requireTeacher, async (req, res) => {
   try {
     const where = { authorId: req.userId };
@@ -3190,7 +3374,7 @@ function getAiConfig() {
     return {
       provider: "gemini",
       apiKey: geminiKey || genericKey,
-      model: process.env.AI_MODEL || "gemini-3.6-flash",
+      model: process.env.AI_MODEL || "gemini-2.5-flash",
     };
   }
 
@@ -3207,7 +3391,7 @@ function getAiConfig() {
     return {
       provider: "gemini",
       apiKey: geminiKey,
-      model: process.env.AI_MODEL || "gemini-3.6-flash",
+      model: process.env.AI_MODEL || "gemini-2.5-flash",
     };
   }
 
@@ -3225,7 +3409,7 @@ function getAiConfig() {
       return {
         provider: "gemini",
         apiKey: genericKey,
-        model: process.env.AI_MODEL || "gemini-6.3-flash",
+        model: process.env.AI_MODEL || "gemini-2.5-flash",
       };
     }
     return {
@@ -3241,33 +3425,6 @@ function getAiConfig() {
 function aiConfigured() {
   const cfg = getAiConfig();
   return Boolean(cfg.apiKey);
-}
-
-async function fetchWithRetry(url, options, maxRetries = 3) {
-  const retryableStatuses = new Set([408, 429, 500, 502, 503, 504]);
-
-  for (let attempt = 0; ; attempt++) {
-    const response = await fetch(url, options);
-
-    if (
-      response.ok ||
-      !retryableStatuses.has(response.status) ||
-      attempt >= maxRetries
-    ) {
-      return response;
-    }
-
-    await response.body?.cancel();
-
-    const delayMs =
-      Math.min(1000 * 2 ** attempt, 8000) + Math.random() * 500;
-
-    console.warn(
-  `Gemini HTTP ${response.status}. Retry ${attempt + 1}/${maxRetries} after ${Math.round(delayMs)} ms`
-);
-
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
-  }
 }
 
 async function callGemini(apiKey, model, messages, { json = false, timeoutMs = 30000 } = {}) {
@@ -3315,7 +3472,7 @@ async function callGemini(apiKey, model, messages, { json = false, timeoutMs = 3
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const resp = await fetchWithRetry(url, {
+    const resp = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

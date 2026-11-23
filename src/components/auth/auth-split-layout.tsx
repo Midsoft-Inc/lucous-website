@@ -18,9 +18,10 @@ import { ThemeToggle } from "@/components/site/theme-toggle";
  * (keep the same file name; if its aspect ratio differs, update the number
  * in IMAGE_COLUMN_WIDTH below).
  */
-const IMAGE_COLUMN_WIDTH = "min(50vw, calc(100dvh * 0.8247))";
-/** Corner radius of the picture (left side). Set to 0 for square corners. */
-const IMAGE_CORNER_RADIUS = 28;
+const IMAGE_COLUMN_WIDTH = "min(50vw, calc(100dvh * 0.95))";
+/** The picture fades into the page background along its left edge. */
+const IMAGE_FADE_MASK =
+  "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.55) 14%, #000 36%)";
 
 export function AuthSplitLayout({
   children,
@@ -31,7 +32,7 @@ export function AuthSplitLayout({
   contentClassName?: string;
 }) {
   return (
-    <main className="min-h-dvh bg-background lg:flex">
+    <main className="min-h-dvh bg-background lg:flex dark:bg-[radial-gradient(900px_circle_at_28%_38%,rgba(37,99,235,0.16),transparent_62%),linear-gradient(160deg,#050b1f,#0a1230_55%,#0b1433)]">
       <div className="flex min-h-dvh min-w-0 flex-1 flex-col px-4 py-8 sm:px-10 sm:py-10 lg:px-10 xl:px-16">
         <div className="flex items-center justify-between">
           <Link
@@ -74,10 +75,9 @@ export function AuthSplitLayout({
             width: "100%",
             height: "100dvh",
             overflow: "hidden",
-            backgroundColor: "#1e293b",
-            // Round the corners that sit against the form panel.
-            borderTopLeftRadius: IMAGE_CORNER_RADIUS,
-            borderBottomLeftRadius: IMAGE_CORNER_RADIUS,
+            // Soft fade so the picture blends into the page instead of a hard edge.
+            WebkitMaskImage: IMAGE_FADE_MASK,
+            maskImage: IMAGE_FADE_MASK,
           }}
         >
           {/* Only visible when the picture file is missing (the <img> below covers it). */}
@@ -109,7 +109,7 @@ export function AuthSplitLayout({
               width: "100%",
               height: "100%",
               objectFit: "cover",
-              objectPosition: "center",
+              objectPosition: "65% center",
             }}
           />
         </div>
