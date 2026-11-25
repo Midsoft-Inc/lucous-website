@@ -23,6 +23,7 @@ import {
 import { cn } from "cn";
 import { useTimeGreeting } from "@/lib/time-greeting";
 import { MaterialUploadPanel } from "./material-upload";
+import { DocGamesPanel } from "./doc-games-panel";
 import { LessonDraftsPanel } from "./lesson-drafts-panel";
 import { AssessmentsPanel } from "./assessments-panel";
 import { PublishedContentList } from "./published-content-list";
@@ -31,11 +32,12 @@ import { ProfileEditor } from "@/components/auth/profile-editor";
 import { TeacherApplicationPanel } from "./teacher-application-panel";
 import { fetchTeacherApplication, type TeacherApplication } from "@/lib/api";
 
-type Tab = "courses" | "students" | "materials" | "lessons" | "assessments" | "published" | "ai" | "application" | "profile";
+type Tab = "courses" | "students" | "materials" | "docgames" | "lessons" | "assessments" | "published" | "ai" | "application" | "profile";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "students", label: "Students" },
   { id: "materials", label: "Learning Materials" },
+  { id: "docgames", label: "Document Games" },
   { id: "lessons", label: "AI Lessons" },
   { id: "assessments", label: "AI Assessments & Games" },
   { id: "published", label: "Published & Codes" },
@@ -223,6 +225,7 @@ export function TeacherHome() {
             {tab === "courses" ? <CoursesPanel /> : null}
             {tab === "students" ? <StudentsPanel /> : null}
             {tab === "materials" ? <MaterialUploadPanel /> : null}
+            {tab === "docgames" ? <DocGamesPanel /> : null}
             {tab === "lessons" ? <LessonDraftsPanel /> : null}
             {tab === "assessments" ? <AssessmentsPanel /> : null}
             {tab === "published" ? (

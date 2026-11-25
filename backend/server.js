@@ -2416,6 +2416,17 @@ try {
   console.warn("[LUCOUS] Student engagement routes not installed; skipping.");
 }
 
+// Document / topic -> game (rule-based, no AI). Teacher uploads -> games; students turn any topic into a game.
+try {
+  const { createDocGameRouters } = require("./routes/doc-games");
+  const docGames = createDocGameRouters(prisma, { requireTeacher, requireStudent, memoryXp: inMemoryUserXp });
+  app.use("/api/teacher", docGames.teacherRouter);
+  app.use("/api/student/doc-games", docGames.studentRouter);
+} catch (err) {
+  if (err.code !== "MODULE_NOT_FOUND" || !/doc-games|text-game-generator/.test(err.message)) throw err;
+  console.warn("[LUCOUS] Document game routes not installed; skipping.");
+}
+
 app.get("/api/teacher/content", requireTeacher, async (req, res) => {
   try {
     const where = { authorId: req.userId };

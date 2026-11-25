@@ -25,6 +25,24 @@ const VISIBLE_ROLES = AUTH_ROLES.filter((role) => role !== "admin");
 
 type Step = "login" | "verify-email" | "role" | "signup-role";
 
+// Each step now has its own address (the screens look exactly the same):
+//   /auth/login  /auth/select-role  /auth/signup  /auth/verify-email
+export type AuthView = "login" | "role" | "signup" | "verify-email";
+
+const TICKET_KEY = "lucous_role_ticket"; // { token, email, remember, at } - this tab only
+const VERIFY_KEY = "lucous_verify_email";
+const NOTICE_KEY = "lucous_auth_notice";
+const TICKET_MAX_AGE_MS = 10 * 60 * 1000;
+
+function readTicket(): { token: string; email: string; remember: boolean; at: number } | null {
+  try {
+    const raw = sessionStorage.getItem(TICKET_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 function RoleCards({
   onPick,
   hrefFor,
@@ -81,16 +99,51 @@ function RoleCards({
 
 // First screen: sign in. Second screen (after the password is accepted): choose your
 // role, which the server checks (5 wrong tries = 15 minute block).
-export function UnifiedAuth() {
+export function UnifiedAuth({ view = "login" }: { view?: AuthView }) {
   const router = useRouter();
 
-  const [step, setStep] = React.useState<Step>("login");
+  const step: Step = view === "signup" ? "signup-role" : view;
+  const [ready, setReady] = React.useState(view === "login" || view === "signup");
   const [remember, setRemember] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
   const [notice, setNotice] = React.useState("");
   const [verifyEmail, setVerifyEmail] = React.useState("");
   const [pendingToken, setPendingToken] = React.useState("");
+
+  React.useEffect(() => {
+    if (view === "login") {
+      const saved = sessionStorage.getItem(NOTICE_KEY);
+      if (saved) {
+        setNotice(saved);
+        sessionStorage.removeItem(NOTICE_KEY);
+      }
+      return;
+    }
+
+    if (view === "role") {
+      const ticket = readTicket();
+      if (!ticket || Date.now() - ticket.at > TICKET_MAX_AGE_MS) {
+        sessionStorage.removeItem(TICKET_KEY);
+        router.replace("/auth/login");
+        return;
+      }
+      setPendingToken(ticket.token);
+      setRemember(Boolean(ticket.remember));
+      setReady(true);
+      return;
+    }
+
+    if (view === "verify-email") {
+      const saved = sessionStorage.getItem(VERIFY_KEY);
+      if (!saved) {
+        router.replace("/auth/login");
+        return;
+      }
+      setVerifyEmail(saved);
+      setReady(true);
+    }
+  }, [view, router]);
 
   async function onLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -117,8 +170,8 @@ export function UnifiedAuth() {
       const data = await response.json();
 
       if (data.needsVerification) {
-        setVerifyEmail(email.toLowerCase());
-        setStep("verify-email");
+        sessionStorage.setItem(VERIFY_KEY, email.toLowerCase());
+        router.push("/auth/verify-email");
         return;
       }
       if (!response.ok || !data.success || !data.pendingToken) {
@@ -126,8 +179,11 @@ export function UnifiedAuth() {
         return;
       }
 
-      setPendingToken(data.pendingToken);
-      setStep("role");
+      sessionStorage.setItem(
+        TICKET_KEY,
+        JSON.stringify({ token: data.pendingToken, email: email.toLowerCase(), remember, at: Date.now() })
+      );
+      router.push("/auth/select-role");
     } catch (err) {
       console.error("Login error:", err);
       setError("Unable to connect to LUCOUS server. Make sure the backend is running.");
@@ -149,9 +205,9 @@ export function UnifiedAuth() {
       const data = await response.json();
 
       if (data.code === "ROLE_STEP_EXPIRED") {
-        setPendingToken("");
-        setStep("login");
-        setError(data.message || "Your sign-in step expired. Please log in again.");
+        sessionStorage.removeItem(TICKET_KEY);
+        sessionStorage.setItem(NOTICE_KEY, data.message || "Your sign-in step expired. Please log in again.");
+        router.replace("/auth/login");
         return;
       }
       if (!response.ok || !data.success) {
@@ -165,6 +221,7 @@ export function UnifiedAuth() {
 
       storage.setItem("lucous_token", data.token);
       storage.setItem("lucous_user", JSON.stringify(user));
+      sessionStorage.removeItem(TICKET_KEY);
 
       setSession({
         role: sessionRole,
@@ -182,6 +239,9 @@ export function UnifiedAuth() {
     }
   }
 
+  // Nothing is drawn until the saved step is read (no flash of another screen).
+  if (!ready) return null;
+
   if (step === "verify-email") {
     return (
       <Card className="mx-auto w-full max-w-md">
@@ -193,8 +253,9 @@ export function UnifiedAuth() {
           <VerifyEmailForm
             email={verifyEmail}
             onVerified={() => {
-              setStep("login");
-              setNotice("Email verified. Please log in.");
+              sessionStorage.removeItem(VERIFY_KEY);
+              sessionStorage.setItem(NOTICE_KEY, "Email verified. Please log in.");
+              router.replace("/auth/login");
             }}
           />
         </CardContent>
@@ -221,9 +282,8 @@ export function UnifiedAuth() {
         <button
           type="button"
           onClick={() => {
-            setPendingToken("");
-            setError("");
-            setStep("login");
+            sessionStorage.removeItem(TICKET_KEY);
+            router.push("/auth/login");
           }}
           className="mt-6 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
         >
@@ -250,7 +310,7 @@ export function UnifiedAuth() {
 
         <button
           type="button"
-          onClick={() => setStep("login")}
+          onClick={() => router.push("/auth/login")}
           className="mt-6 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" aria-hidden />
@@ -326,10 +386,7 @@ export function UnifiedAuth() {
           Don&apos;t have an account?{" "}
           <button
             type="button"
-            onClick={() => {
-              setError("");
-              setStep("signup-role");
-            }}
+            onClick={() => router.push("/auth/signup")}
             className="font-medium text-primary underline-offset-4 hover:underline"
           >
             Sign up

@@ -19,6 +19,7 @@ import {
   Layers,
   Sparkles,
   Gamepad2,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -81,6 +82,10 @@ export function MaterialUploadPanel() {
   const [description, setDescription] = React.useState("");
 
   // Upload status & Progress
+  // Collapsible panels so the page does not grow endlessly (UI only)
+  const [uploadOpen, setUploadOpen] = React.useState(true);
+  const [listOpen, setListOpen] = React.useState(true);
+  const autoCollapsedRef = React.useRef(false);
   const [uploading, setUploading] = React.useState(false);
   const [uploadProgress, setUploadProgress] = React.useState(0);
   const [uploadSuccess, setUploadSuccess] = React.useState<TeacherMaterial | null>(null);
@@ -148,6 +153,10 @@ export function MaterialUploadPanel() {
     try {
       const res = await fetchTeacherMaterials();
       setMaterials(res.materials || []);
+      if (!autoCollapsedRef.current) {
+        autoCollapsedRef.current = true;
+        if ((res.materials || []).length > 0) setUploadOpen(false);
+      }
       if (res.storageMode) {
         setStorageMode(res.storageMode);
       }
@@ -385,6 +394,8 @@ export function MaterialUploadPanel() {
 
       if (res.success && res.material) {
         setUploadSuccess(res.material);
+        setUploadOpen(false);
+        setListOpen(true);
         handleRemoveFile();
         setCustomSubject("");
         setChapterName("");
@@ -551,19 +562,32 @@ export function MaterialUploadPanel() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Upload Form Column (5 cols on large) */}
-        <div className="lg:col-span-5 space-y-4">
+        <div className="lg:col-span-12 space-y-4">
           <Card className="border-border/70 shadow-xs">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
-                <FolderOpen className="w-4 h-4 text-primary" />
-                Upload New Document
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Supports PDF, DOCX, TXT, PNG, and JPEG source materials.
-              </CardDescription>
+              <button
+                type="button"
+                onClick={() => setUploadOpen((o) => !o)}
+                aria-expanded={uploadOpen}
+                className="flex w-full items-center justify-between gap-3 text-left"
+              >
+                <div>
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <FolderOpen className="w-4 h-4 text-primary" />
+                    Upload New Document
+                  </CardTitle>
+                  <CardDescription className="text-xs mt-1">
+                    {!uploadOpen && uploadSuccess
+                      ? `✓ Uploaded ${uploadSuccess.originalName}. Click to upload another.`
+                      : "Supports PDF, DOCX, TXT, PNG, and JPEG source materials."}
+                  </CardDescription>
+                </div>
+                <ChevronDown className={cn("w-4 h-4 shrink-0 text-muted-foreground transition-transform", uploadOpen && "rotate-180")} />
+              </button>
             </CardHeader>
+            {uploadOpen ? (
             <CardContent>
-              <form onSubmit={handleUploadSubmit} className="space-y-4">
+              <form onSubmit={handleUploadSubmit} className="grid gap-4 lg:grid-cols-12 lg:items-start">
                 {/* Drag and Drop Zone */}
                 <div
                   onDragOver={handleDragOver}
@@ -571,7 +595,7 @@ export function MaterialUploadPanel() {
                   onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
                   className={cn(
-                    "relative border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all duration-200",
+                    "relative border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all duration-200 lg:col-span-4 lg:self-stretch lg:min-h-56 flex items-center justify-center",
                     dragActive
                       ? "border-primary bg-primary/5 scale-[1.01]"
                       : "border-border/70 hover:border-primary/50 hover:bg-muted/30",
@@ -634,15 +658,15 @@ export function MaterialUploadPanel() {
 
                 {/* File Error Notice */}
                 {fileError && (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive flex items-start gap-2">
+                  <div className="lg:col-span-12 rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                     <span>{fileError}</span>
                   </div>
                 )}
 
                 {/* Curriculum Metadata Fields */}
-                <div className="space-y-3 pt-1 border-t border-border/40">
-                  <div className="flex items-center justify-between">
+                <div className="grid grid-cols-2 xl:grid-cols-3 gap-2.5 pt-1 border-t border-border/40 lg:col-span-8 lg:border-t-0 lg:pt-0">
+                  <div className="col-span-full flex items-center justify-between">
                     <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                       <Layers className="w-3.5 h-3.5 text-primary" />
                       Curriculum Alignment
@@ -678,7 +702,7 @@ export function MaterialUploadPanel() {
 
                   {/* School Fields */}
                   {educationLevel === "school" ? (
-                    <div className="grid grid-cols-2 gap-2.5">
+                    <div className="contents">
                       <div className="space-y-1">
                         <label className="text-[11px] font-medium text-muted-foreground">Class / Grade *</label>
                         <select
@@ -724,7 +748,7 @@ export function MaterialUploadPanel() {
                     </div>
                   ) : (
                     /* Diploma Fields */
-                    <div className="grid grid-cols-2 gap-2.5">
+                    <div className="contents">
                       <div className="col-span-2 space-y-1">
                         <label className="text-[11px] font-medium text-muted-foreground">Engineering Branch *</label>
                         <select
@@ -811,7 +835,7 @@ export function MaterialUploadPanel() {
                   </div>
 
                   {/* Chapter and Topic */}
-                  <div className="grid grid-cols-2 gap-2.5">
+                  <div className="contents">
                     <div className="space-y-1">
                       <label className="text-[11px] font-medium text-muted-foreground">Chapter / Unit</label>
                       <Input
@@ -833,7 +857,7 @@ export function MaterialUploadPanel() {
                   </div>
 
                   {/* Language & Description */}
-                  <div className="grid grid-cols-1 gap-2.5">
+                  <div className="contents">
                     <div className="space-y-1">
                       <label className="text-[11px] font-medium text-muted-foreground">Content Language *</label>
                       <select
@@ -849,7 +873,7 @@ export function MaterialUploadPanel() {
                       </select>
                     </div>
 
-                    <div className="space-y-1">
+                    <div className="col-span-full space-y-1">
                       <label className="text-[11px] font-medium text-muted-foreground">Optional Notes / Summary</label>
                       <textarea
                         rows={2}
@@ -864,7 +888,7 @@ export function MaterialUploadPanel() {
 
                 {/* Upload Progress Bar */}
                 {uploading && (
-                  <div className="space-y-1.5 pt-2">
+                  <div className="lg:col-span-12 space-y-1.5 pt-2">
                     <div className="flex justify-between text-[11px] text-muted-foreground">
                       <span>Validating and uploading...</span>
                       <span>{uploadProgress}%</span>
@@ -880,7 +904,7 @@ export function MaterialUploadPanel() {
 
                 {/* Error Banner */}
                 {uploadError && (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive flex items-start gap-2">
+                  <div className="lg:col-span-12 rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                     <div className="space-y-1 flex-1">
                       <p>{uploadError}</p>
@@ -899,7 +923,7 @@ export function MaterialUploadPanel() {
 
                 {/* Success Banner */}
                 {uploadSuccess && (
-                  <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-600 dark:text-emerald-400 flex items-start gap-2">
+                  <div className="lg:col-span-12 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-600 dark:text-emerald-400 flex items-start gap-2">
                     <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
                     <div>
                       <p className="font-semibold">Upload Successful!</p>
@@ -914,7 +938,7 @@ export function MaterialUploadPanel() {
                 <Button
                   type="submit"
                   disabled={uploading || !selectedFile || !!fileError}
-                  className="w-full text-xs h-9 gap-1.5 font-medium"
+                  className="w-full lg:col-span-12 lg:w-auto lg:justify-self-end lg:px-8 text-xs h-9 gap-1.5 font-medium"
                 >
                   {uploading ? (
                     <>
@@ -930,11 +954,12 @@ export function MaterialUploadPanel() {
                 </Button>
               </form>
             </CardContent>
+            ) : null}
           </Card>
         </div>
 
         {/* Uploaded Materials List Column (7 cols on large) */}
-        <div className="lg:col-span-7 space-y-4">
+        <div className="lg:col-span-12 space-y-4">
           <Card className="border-border/70 shadow-xs">
             <CardHeader className="pb-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -958,9 +983,20 @@ export function MaterialUploadPanel() {
                   <RefreshCw className={cn("w-3 h-3", loadingList && "animate-spin")} />
                   Refresh
                 </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setListOpen((o) => !o)}
+                  aria-expanded={listOpen}
+                  className="h-7 text-xs self-start sm:self-auto gap-1"
+                >
+                  {listOpen ? "Hide" : "Show"}
+                  <ChevronDown className={cn("w-3 h-3 transition-transform", listOpen && "rotate-180")} />
+                </Button>
               </div>
 
               {/* Filters & Search */}
+              {listOpen ? (
               <div className="flex flex-col sm:flex-row gap-2 pt-2">
                 <div className="relative flex-1">
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
@@ -1011,9 +1047,11 @@ export function MaterialUploadPanel() {
                   </button>
                 </div>
               </div>
+              ) : null}
             </CardHeader>
 
-            <CardContent>
+            {listOpen ? (
+            <CardContent className="max-h-[55vh] overflow-y-auto pr-2">
               {(lessonGenError || assessmentGenError) && (
                 <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive flex items-start gap-2 mb-3">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -1059,14 +1097,14 @@ export function MaterialUploadPanel() {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="grid gap-2.5 md:grid-cols-2">
                   {filteredMaterials.map((mat) => (
                     <div
                       key={mat.id}
-                      className="rounded-xl border border-border/70 bg-card p-3.5 hover:border-border transition-all space-y-2.5"
+                      className="rounded-lg border border-border/70 bg-card p-2.5 hover:border-border transition-all space-y-1.5"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-3 min-w-0">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="flex items-start gap-2.5 min-w-0">
                           <div className="p-2 rounded-lg bg-muted/50 border border-border/50 shrink-0 mt-0.5">
                             {getFileIcon(mat.extension || (mat.originalName?.includes(".") ? mat.originalName.slice(mat.originalName.lastIndexOf(".")) : ""))}
                           </div>
@@ -1191,7 +1229,7 @@ export function MaterialUploadPanel() {
                         </Badge>
 
                         {/* Checksum snippet */}
-                        <span className="ml-auto text-[10px] text-muted-foreground font-mono truncate max-w-[150px]" title={`SHA256: ${mat.checksum}`}>
+                        <span className="hidden xl:inline ml-auto text-[10px] text-muted-foreground font-mono truncate max-w-[110px]" title={`SHA256: ${mat.checksum}`}>
                           sha256:{mat.checksum.slice(0, 10)}…
                         </span>
                       </div>
@@ -1206,6 +1244,7 @@ export function MaterialUploadPanel() {
                 </div>
               )}
             </CardContent>
+            ) : null}
           </Card>
         </div>
       </div>

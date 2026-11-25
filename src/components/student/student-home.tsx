@@ -51,6 +51,7 @@ const QUICK_ACTIONS = [
   { href: "/student/practice", label: "Practice", icon: PenLine, hint: "Topic practice" },
   { href: "/student/test", label: "Test", icon: ClipboardList, hint: "Topic test" },
   { href: "/student/games", label: "Games", icon: Gamepad2, hint: "Earn XP & compete" },
+  { href: "/student/doc-games", label: "Study Games", icon: Gamepad2, hint: "Any topic → game" },
   { href: "/student/tutor", label: "AI Tutor", icon: Sparkles, hint: "Ask anything" },
   { href: "/student/certificates", label: "Certificate", icon: Award, hint: "Unlock at 100%" },
   { href: "/student/profile", label: "Profile", icon: User, hint: "Your account" },

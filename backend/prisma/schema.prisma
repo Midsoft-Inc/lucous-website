@@ -418,3 +418,30 @@ model ClassAccessCode {
 
   @@index([teacherId])
 }
+
+// ----------------- Document / Topic -> Game (rule-based, no AI) --------------
+// Stores a generated quest (levels + answers). Students only ever receive the
+// answer-stripped version; scoring happens on the server. Plays/XP reuse the
+// existing GameScore table and User.xp, so the leaderboard keeps working.
+model DocGame {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  ownerId    String   @db.ObjectId
+  ownerRole  String   // TEACHER | STUDENT
+  sourceType String   // MATERIAL | TOPIC | TEXT
+  materialId String?
+  topicId    String?
+  title      String
+  difficulty String   @default("MEDIUM")
+  status     String   @default("DRAFT") // DRAFT | PUBLISHED
+  accessCode String?  // GM-XXXXXX, set when a teacher publishes
+  sourceHash String
+  game       Json
+  stats      Json?
+  playCount  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([accessCode])
+  @@index([sourceHash])
+}
