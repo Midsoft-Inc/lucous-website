@@ -42,8 +42,8 @@ export function DialogsProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<DialogsValue>(
     () => ({
       // Auth now lives on the /auth role-selection pages.
-      openAuth: () => {
-        router.push("/auth");
+      openAuth: (tab) => {
+        router.push(tab === "signup" ? "/auth/signup" : "/auth/login");
       },
       openSearch: () => setSearchOpen(true),
     }),
