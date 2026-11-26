@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { motion, useScroll, useSpring } from "framer-motion"
-import { Bot, Menu, Search } from "lucide-react"
+import { Menu, Search } from "lucide-react"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
@@ -61,8 +61,8 @@ export function Navbar() {
       className={cn(
         "sticky top-0 z-40 w-full transition-[background-color,border-color,box-shadow,backdrop-filter] duration-300",
         scrolled
-          ? "border-b border-slate-700/70 bg-[#071126]/90 shadow-[0_10px_35px_rgba(0,0,0,.22)] backdrop-blur-xl"
-          : "border-b border-slate-800/70 bg-[#071126]"
+          ? "border-b border-border/70 bg-background/85 shadow-soft backdrop-blur-md supports-backdrop-filter:bg-background/70"
+          : "border-b border-transparent bg-background"
       )}
     >
       <motion.div
@@ -71,13 +71,12 @@ export function Navbar() {
         className="absolute inset-x-0 top-0 h-0.5 origin-left bg-primary"
       />
 
-      <nav className="mx-auto flex h-16 max-w-[1640px] items-center gap-2 px-4 sm:px-6 lg:px-8">
+      <nav className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:px-6 lg:px-8">
         <a
           href="#home"
           aria-label="Lucous — home"
-          className="inline-flex items-center rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         >
-          <span className="mr-2 grid size-8 place-items-center rounded-xl border border-cyan-300/30 bg-cyan-400/10 text-cyan-300"><Bot className="size-5" /></span>
           <LucousLogo className="text-[1.35rem] leading-none" />
         </a>
 
@@ -93,8 +92,8 @@ export function Navbar() {
                 className={cn(
                   "relative flex h-16 items-center px-3 text-sm font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                   isActive
-                    ? "text-white"
-                    : "text-slate-400 hover:text-white"
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 {link.label}
@@ -102,7 +101,7 @@ export function Navbar() {
                   <motion.span
                     layoutId="nav-active-underline"
                     transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                    className="absolute inset-x-2.5 bottom-0 h-[2.5px] rounded-full bg-gradient-to-r from-cyan-400 to-blue-500"
+                    className="absolute inset-x-2.5 bottom-0 h-[2.5px] rounded-full bg-primary"
                   />
                 )}
               </a>
@@ -115,7 +114,7 @@ export function Navbar() {
           <Button
             variant="outline"
             onClick={() => openSearch()}
-            className="hidden h-9 w-48 justify-start gap-2 border-slate-700 bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-white md:inline-flex xl:w-56"
+            className="hidden h-8 w-48 justify-start gap-2 text-muted-foreground md:inline-flex xl:w-56"
             aria-label="Search Lucous"
           >
             <Search className="size-4" />
@@ -145,11 +144,11 @@ export function Navbar() {
           <Button
             variant="outline"
             onClick={() => openAuth("login")}
-            className="hidden border-slate-600 bg-transparent text-white hover:bg-slate-800 sm:inline-flex"
+            className="hidden sm:inline-flex"
           >
             Log In
           </Button>
-          <Button onClick={() => openAuth("signup")} className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-[0_0_18px_rgba(59,130,246,.25)] hover:brightness-110">Get Started</Button>
+          <Button onClick={() => openAuth("signup")}>Get Started</Button>
 
           {/* Mobile menu */}
           <Button

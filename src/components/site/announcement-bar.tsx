@@ -35,9 +35,9 @@ export function AnnouncementBar() {
           animate={reduceMotion ? undefined : { height: "auto", opacity: 1 }}
           exit={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
           transition={{ duration: 0.28, ease: [0.21, 0.47, 0.32, 0.98] }}
-          className="overflow-hidden bg-gradient-to-r from-blue-600 via-violet-600 to-fuchsia-600 text-white"
+          className="overflow-hidden bg-primary text-primary-foreground"
         >
-          <div className="relative mx-auto flex max-w-[1640px] flex-wrap items-center justify-center gap-x-3 gap-y-0.5 px-10 py-2.5 text-center text-xs sm:px-12 sm:text-[13px]">
+          <div className="relative mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-x-3 gap-y-0.5 px-10 py-2 text-center text-xs sm:px-12 sm:text-[13px]">
             <span className="hidden items-center gap-1 sm:flex" aria-hidden>
               <span className="size-1.5 rounded-full bg-white/90" />
               <span className="size-1.5 rounded-full bg-brand-yellow" />
@@ -45,7 +45,7 @@ export function AnnouncementBar() {
             </span>
             <p>
               <span className="font-semibold">Now in early access.</span>{" "}
-              <span className="text-white/90">
+              <span className="text-primary-foreground/85">
                 Founding learners get 3 months of Student Pro free.
               </span>
             </p>
@@ -60,7 +60,7 @@ export function AnnouncementBar() {
               type="button"
               onClick={dismiss}
               aria-label="Dismiss announcement"
-              className="absolute right-2 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-white/80 transition-colors hover:bg-white/15 hover:text-white outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              className="absolute right-2 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-primary-foreground/80 transition-colors hover:bg-white/15 hover:text-primary-foreground outline-none focus-visible:ring-2 focus-visible:ring-white/70"
             >
               <X className="size-3.5" />
             </button>
