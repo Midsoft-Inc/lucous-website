@@ -27,7 +27,9 @@ const API_URL = (
 ).replace(/\/+$/, "");
 const API_PATH =
   process.env.NEXT_PUBLIC_CHATBOT_API_PATH ?? "/api/v1/chat/stream";
-const LOGO_SRC = "/chatbot/lucous-chatbot-logo.png";
+const LOGO_SRC = "/chatbot/lucous-mascot-avatar.png";
+// Floating launcher button only (header + message avatars keep the logo above).
+const LAUNCHER_SRC = "/chatbot/lucous-mascot.png";
 
 const GREETING =
   "Hi there! 👋\nI'm LUCOUS, your AI study assistant.\nAsk me anything about your studies.";
@@ -689,7 +691,8 @@ export function LucousChatbot() {
           onClick={() => setOpen(true)}
           aria-label="Open LUCOUS AI chatbot"
         >
-          <Logo />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={LAUNCHER_SRC} alt="" draggable={false} />
           <span className="lc-launcher-status" />
         </button>
       )}
